@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Поваренная книга для голодающихъ - журналъ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#e7dcbf; --ink:#2a2014; --ink-soft:#5a4a32;
+    --ember:#8c2f1d; --gold:#9c7b3a; --rule:#b7a577;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:#171310;
+    background:radial-gradient(120% 90% at 50% 18%, #2a2218 0%, #16110d 55%, #0c0907 100%);
+    color:var(--paper); font-family:"PT Serif",Georgia,serif;
+    min-height:100%; overflow:hidden;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transition:background 1.6s ease;
+  }
+  /* desk darkens as we descend */
+  body[data-act="2"]{background:radial-gradient(120% 90% at 50% 20%, #221c14 0%, #120e0a 55%, #090706 100%)}
+  body[data-act="3"]{background:radial-gradient(120% 90% at 50% 24%, #1a140e 0%, #0c0907 55%, #050403 100%)}
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:radial-gradient(110% 80% at 50% 40%, transparent 55%, rgba(0,0,0,.45) 100%);
+  }
+
+  .stage{position:relative; z-index:1; width:min(96vw,1180px); height:min(90vh,860px);
+    display:flex; align-items:center; justify-content:center}
+  /* soft ground shadow under the volume (static → no flip jank); kept narrow so it
+     doesn't show as a box on single-page cover/back views */
+  .stage::before{content:""; position:absolute; z-index:0; width:58%; height:72%; left:50%; top:56%;
+    transform:translate(-50%,-50%);
+    box-shadow:0 26px 50px rgba(0,0,0,.45)}
+  #book{position:relative; z-index:1; margin:0 auto}
+
+  /* ---- page base + per-act tone ---- */
+  .page{color:var(--ink); overflow:hidden; container-type:size;
+    background:#d8c9a4 var(--tex) center/cover no-repeat;
+    box-shadow:inset 0 0 30px rgba(40,28,10,.12)}
+  /* real photographed aged-paper surfaces - progressively older per act.
+     --bloom = how much the protected centre is lifted so ink stays legible */
+  .page{--tex:url('materials/textures/tex_a.jpg'); --bloom:.42}
+  .page[data-act="1"]{--tex:url('materials/textures/tex_a.jpg'); --ink:#2a2014; --rule:#b3a070; --bloom:.42}
+  .page[data-act="2"]{--tex:url('materials/textures/tex_b.jpg'); --ink:#241803; --rule:#7d6840; --bloom:.42}
+  .page[data-act="3"]{--tex:url('materials/textures/tex_c.jpg'); --ink:#1f1402; --rule:#6f5d34; --bloom:.5}
+  /* facing leaves crop different parts of the sheet → reads continuous, not tiled */
+  .page:nth-child(odd){background-position:left center}
+  .page:nth-child(even){background-position:right center}
+  /* gentle vignette over the real texture; act III sinks darker */
+  .page::after{content:""; position:absolute; inset:0; pointer-events:none; z-index:1;
+    background:radial-gradient(130% 120% at 50% 50%, transparent 72%, rgba(40,26,8,.16) 100%)}
+  .page[data-act="3"]::after{background:
+      radial-gradient(130% 120% at 50% 50%, transparent 52%, rgba(28,16,5,.42) 100%),
+      linear-gradient(rgba(26,15,5,.12), rgba(26,15,5,.14))}
+  /* spine gutter is drawn by #spine, JS-placed between the two visible leaves,
+     so the dark desk never shows through the seam as a black slit */
+  #spine{opacity:0; transition:opacity .2s ease}
+
+  .pad{position:absolute; inset:0; padding:8.5cqh 9cqw; display:flex; flex-direction:column;
+    font-size:3.25cqw; z-index:2}
+  /* warm "protected centre" bloom - lifts ink legibility over dark aged paper,
+     fades to transparent so stained/torn edges stay dramatic. Paper pages only. */
+  .page:not(.cover):not(.back):not(.plate):not(.rupture):not(.silence) .pad::before{
+    content:""; position:absolute; inset:0; z-index:-1; pointer-events:none;
+    background:radial-gradient(135% 125% at 50% 50%,
+      rgba(240,229,201,var(--bloom)) 0%,
+      rgba(240,229,201,var(--bloom)) 64%,
+      rgba(240,229,201,calc(var(--bloom) * .7)) 86%,
+      transparent 100%)}
+  /* gentle reveal - used ONLY on the silence beat (normal pages sit static, like a real book) */
+  @keyframes fadeup{from{opacity:0; transform:translateY(12px)} to{opacity:1; transform:none}}
+
+  .rh{display:flex; justify-content:space-between; align-items:baseline;
+    font-size:.62em; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-soft);
+    border-bottom:1px solid var(--rule); padding-bottom:.5em; margin-bottom:1.1em}
+  .foot{margin-top:auto; padding-top:.8em; border-top:1px solid var(--rule);
+    display:flex; justify-content:space-between; font-size:.58em; letter-spacing:.12em;
+    color:var(--ink-soft); text-transform:uppercase}
+
+  h2.head{font-family:"Playfair Display",serif; font-weight:700; line-height:1.08;
+    font-size:1.85em; margin:.1em 0 .15em; color:#1d1509}
+  /* letterpress: faint ink-spread + roughened edges on LARGE display type only */
+  h2.head,.divider h2,.cover h1,.pull,.rupture .shout{
+    filter:url(#letterpress);
+    text-shadow:.3px .3px 0 rgba(42,32,20,.22), -.3px -.3px 0 rgba(42,32,20,.12)}
+  .kicker{font-family:"Playfair Display",serif; font-style:italic; color:var(--ember);
+    font-size:.8em; letter-spacing:.04em; margin-bottom:.5em}
+  .body{font-size:.92em; line-height:1.5; text-align:justify; hyphens:auto; color:var(--ink);
+    text-shadow:.18px .18px 0 rgba(42,32,20,.12)}
+  .body p{margin-bottom:.6em}
+  .body p + p{text-indent:1.3em}
+  .dropcap::first-letter{font-family:"Playfair Display",serif; font-weight:800; float:left;
+    line-height:.78; font-size:3.5em; padding:.06em .12em 0 0; color:var(--ember);
+    filter:url(#letterpress); text-shadow:.4px .4px 0 rgba(140,47,29,.18)}
+  .pull{font-family:"Playfair Display",serif; font-style:italic; font-weight:600;
+    font-size:1.15em; line-height:1.28; color:#1d1509; text-align:center; margin:.5em 0; text-wrap:balance}
+  .src{display:block; font-size:.62em; font-style:normal; letter-spacing:.06em;
+    color:var(--ink-soft); text-align:right; margin-top:.4em}
+  .src::before{content:"- "}
+  .orn{text-align:center; color:var(--gold); font-size:.9em; letter-spacing:.5em; margin:.55em 0}
+
+  /* overheard voices on the margins */
+  .voice{position:absolute; font-family:"Caveat",cursive; color:rgba(70,48,22,.55);
+    font-size:1.55em; line-height:1.05; transform:rotate(-7deg); z-index:2; pointer-events:none}
+
+  .agit{border:1px solid var(--gold); border-width:3px 1px; padding:.7em .9em; text-align:center;
+    margin:.2em 0 .7em; background:rgba(156,123,58,.07)}
+  .agit .k{font-family:"Playfair Display",serif; font-weight:700; color:var(--ember); font-size:1.05em; line-height:1.1}
+  .agit .s{font-size:.78em; margin-top:.25em; color:var(--ink-soft)}
+
+  /* COVER / BACK */
+  .cover,.back{background:radial-gradient(120% 100% at 50% 35%, #5a2114 0%, #3a130c 55%, #240a06 100%); color:#ecd9b0}
+  .cover::after,.back::after{opacity:.5}
+  .cover .pad,.back .pad{align-items:center; text-align:center; justify-content:center; gap:.3em; padding:12cqh 11cqw}
+  .cover .frame{position:absolute; inset:5cqw; border:1px solid rgba(214,176,110,.55); z-index:2}
+  .cover .frame::after{content:""; position:absolute; inset:.6cqw; border:1px solid rgba(214,176,110,.3)}
+  .cover .pretitle{font-family:"Playfair Display",serif; font-style:italic; color:#d9b46e; font-size:.85em; letter-spacing:.05em}
+  .cover h1{font-family:"Playfair Display",serif; font-weight:800; font-size:2.5em; line-height:1.02; color:#f2e2bd; margin:.18em 0; text-shadow:0 1px 0 rgba(0,0,0,.4)}
+  .cover .by{font-size:.92em; letter-spacing:.04em; color:#e9d3a3; margin-top:.4em}
+  .cover .yr{font-family:"Playfair Display",serif; font-size:.95em; letter-spacing:.4em; color:#d9b46e; margin-top:.6em}
+  .cover .sub{font-size:.72em; letter-spacing:.18em; text-transform:uppercase; color:#c7a877; margin-top:.2em}
+  .cover .goldrule{width:38%; height:2px; background:linear-gradient(90deg,transparent,#d9b46e,transparent); margin:.5em auto}
+
+  /* DIVIDER */
+  .divider .pad{align-items:center; text-align:center; justify-content:center; gap:.4em}
+  .divider .otd{font-family:"Playfair Display",serif; letter-spacing:.35em; text-transform:uppercase; color:var(--ember); font-size:.72em}
+  .divider h2{font-family:"Playfair Display",serif; font-weight:700; font-size:2.1em; line-height:1.1; color:#1d1509}
+  .divider .lead{font-size:.82em; color:var(--ink-soft); max-width:24ch; margin-top:.3em; line-height:1.45}
+  .divider .big{font-family:"Playfair Display",serif; font-size:3.4em; color:var(--gold); opacity:.5; line-height:1}
+
+  /* PLATE */
+  /* tipped-in plate: photo glued onto the page's aged paper, foxed & soft.
+     paper shows through (no flat dark fill); --mt/--ms = the bare-paper margin */
+  .plate{--mt:11cqh; --ms:10cqw}
+  .plate .img{position:absolute; top:var(--mt); left:var(--ms); right:var(--ms); bottom:calc(var(--mt) + 11cqh);
+    background-size:cover; background-position:center;
+    transform:rotate(-.6deg);
+    border:.8cqw solid #ded0a6;
+    box-shadow:0 1.6cqh 3.2cqw rgba(28,16,4,.5), inset 0 0 2cqw rgba(40,24,8,.4);
+    filter:sepia(.6) saturate(.7) contrast(.9) brightness(.92) blur(.25px)}
+  .plate[data-act="3"] .img{filter:sepia(.7) saturate(.55) contrast(.88) brightness(.76) blur(.3px)}
+  /* foxing/age: warm paper bleeds in at the print edges (kept to one element) */
+  .plate .vig{position:absolute; top:var(--mt); left:var(--ms); right:var(--ms); bottom:calc(var(--mt) + 11cqh);
+    z-index:2; pointer-events:none; transform:rotate(-.6deg); mix-blend-mode:multiply;
+    background:radial-gradient(115% 100% at 50% 45%, transparent 52%, rgba(120,86,40,.5) 100%)}
+  .plate[data-act="3"] .vig{background:radial-gradient(115% 100% at 50% 45%, transparent 40%, rgba(60,38,14,.7) 100%)}
+  /* caption sits on the bare paper under the mounted print, as an engraved line */
+  .plate .cap{position:absolute; left:var(--ms); right:var(--ms); bottom:3.5cqh; z-index:4;
+    color:var(--ink-soft); padding:0; font-style:italic; font-size:3cqw; line-height:1.35; text-align:center}
+  .plate .cap b{font-style:normal; font-weight:700; color:#1d1509}
+
+  /* DIPTYCH */
+  .dip .pair{display:flex; gap:.6em; flex:1; min-height:0; margin:.3em 0 .6em}
+  .dip .pair figure{flex:1; display:flex; flex-direction:column; min-height:0}
+  .dip .pair .ph{flex:1; background-size:cover; background-position:center; filter:sepia(.4) contrast(1.02); border:1px solid #8f7948; min-height:0}
+  .dip figcaption{font-size:.62em; font-style:italic; color:var(--ink-soft); text-align:center; margin-top:.35em; line-height:1.25}
+  .dip figcaption b{font-style:normal; color:#1d1509}
+
+  /* CONTENTS */
+  .toc .row{display:flex; align-items:baseline; gap:.4em; margin:.5em 0; font-size:.94em}
+  .toc .row .t{font-family:"Playfair Display",serif; font-weight:600; color:#1d1509}
+  .toc .row .d{flex:1; border-bottom:1px dotted var(--rule); transform:translateY(-.18em)}
+  .toc .row .n{color:var(--ember); font-family:"Playfair Display",serif}
+  .toc .row .sub{display:block; font-size:.66em; color:var(--ink-soft); font-style:italic; margin-top:.05em}
+
+  /* SOURCES */
+  .refs li{list-style:none; font-size:.74em; line-height:1.4; padding:.42em 0; border-bottom:1px solid var(--rule); color:var(--ink)}
+  .refs li b{color:#1d1509}
+  .refs .note{font-size:.66em; color:var(--ink-soft); margin-top:.7em; line-height:1.4; font-style:italic}
+
+  /* ============ THE RUPTURE ============ */
+  .rupture{background:radial-gradient(120% 110% at 50% 38%, #3a0c06 0%, #1f0603 55%, #0c0201 100%)}
+  .rupture::after,.rupture::before{display:none}
+  .rupture .rip{position:absolute; top:0; left:0; right:0; height:13cqh; z-index:4;
+    background:linear-gradient(#efe4c6,#e0d2aa);
+    box-shadow:0 5px 10px rgba(0,0,0,.5);
+    clip-path:polygon(0 0,100% 0,100% 52%,96% 76%,93% 50%,90% 80%,86% 55%,82% 84%,79% 52%,75% 80%,71% 56%,68% 86%,64% 54%,60% 80%,56% 52%,52% 85%,48% 56%,44% 82%,40% 50%,36% 84%,33% 55%,29% 80%,25% 52%,21% 85%,17% 56%,13% 80%,10% 50%,6% 83%,3% 54%,0 80%)}
+  .rupture .rpad{justify-content:center; align-items:center; text-align:center; padding:16cqh 8cqw 10cqh}
+  .rupture .lead-line{font-family:"PT Serif",serif; font-style:italic; color:#d6a88f; font-size:.9em; letter-spacing:.04em; margin-bottom:.4em; opacity:.85}
+  .rupture .shout{font-family:"Caveat",cursive; font-weight:700; color:#e23a22; font-size:3.1em; line-height:.98;
+    transform:rotate(-1deg); text-shadow:0 2px 14px rgba(180,20,6,.45), 0 0 2px rgba(0,0,0,.5)}
+  .rupture .cook{position:absolute; right:6cqw; bottom:16cqh; color:rgba(230,200,160,.6); transform:rotate(6deg); text-align:right; font-size:1.4em}
+  .rupture .rsrc{margin-top:1em; font-size:.62em; letter-spacing:.06em; color:rgba(214,168,143,.7); font-style:italic}
+  .rupture.hit .shout{animation:shake .5s ease}
+  @keyframes shake{
+    0%,100%{transform:rotate(-1deg)}
+    12%{transform:translate(-6px,3px) rotate(-3deg) scale(1.02)}
+    28%{transform:translate(5px,-3px) rotate(1deg)}
+    44%{transform:translate(-5px,2px) rotate(-2.4deg)}
+    60%{transform:translate(4px,-2px) rotate(.6deg)}
+    78%{transform:translate(-2px,1px) rotate(-1.4deg)}
+  }
+
+  /* ============ SILENCE AFTER THE SHOUT ============ */
+  .silence{background:radial-gradient(120% 110% at 50% 45%, #14100b 0%, #090705 60%, #040302 100%)}
+  .silence::after,.silence::before{display:none}
+  .silence .spad{align-items:center; justify-content:center; text-align:center; gap:2.2em}
+  .silence .hush{color:rgba(180,150,100,.32); letter-spacing:.7em; font-size:1.1em}
+  .silence .year{font-family:"PT Serif",serif; color:#cdb98c; font-size:1.05em; letter-spacing:.22em; opacity:.86}
+  .silence .year::after{content:""; display:block; width:34px; height:1px; background:rgba(205,185,140,.4); margin:1.1em auto 0}
+  /* slow, late breath for the silence page */
+  .silence .pad.play{animation:fadeup 2.2s ease both}
+
+  /* one-shot screen darken on the rupture */
+  #flash{position:fixed; inset:0; background:#000; opacity:0; pointer-events:none; z-index:25}
+  #flash.go{animation:flash .55s ease}
+  @keyframes flash{0%{opacity:0} 16%{opacity:.74} 100%{opacity:0}}
+
+  /* controls */
+  .bar{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:30;
+    display:flex; align-items:center; gap:16px; color:#caa86f; font-size:12px; letter-spacing:.18em; text-transform:uppercase}
+  .bar button{background:none; border:1px solid rgba(202,168,111,.4); color:#e7d3a3; width:42px; height:42px;
+    border-radius:50%; cursor:pointer; font-size:18px; line-height:1; transition:.18s; font-family:Georgia,serif}
+  .bar button:hover{background:rgba(202,168,111,.16); border-color:#caa86f}
+  .bar .ctr{min-width:96px; text-align:center; font-variant-numeric:lining-nums}
+  #mute{font-size:15px}
+  .hint{position:fixed; top:20px; left:50%; transform:translateX(-50%); z-index:30; color:#9c8255;
+    font-size:11px; letter-spacing:.22em; text-transform:uppercase; transition:opacity .6s; pointer-events:none}
+  .loading{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:#caa86f;
+    font-family:"Playfair Display",serif; font-style:italic; font-size:20px; z-index:40; background:#16110d; transition:opacity .5s}
+
+  @media(max-width:680px){ .voice{font-size:1.2em} .rupture .shout{font-size:2.4em} }
+</style>
+</head>
+<body>
+
+<!-- letterpress: tiny edge-roughen for LARGE display type only (cheap; never on body) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="letterpress" x="-3%" y="-3%" width="106%" height="106%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="0.7" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
+<div id="flash"></div>
+<div id="spine"></div>
+<div class="loading" id="loading">раскрываемъ журналъ…</div>
+<div class="hint" id="hint">тяните уголъ страницы · ← → · колесо</div>
+
+<div class="stage">
+  <div id="book">
+
+    <!-- 0 · COVER -->
+    <div class="page cover" data-density="hard">
+      <div class="frame"></div>
+      <div class="pad">
+        <div class="pretitle">Замѣтки съ натуры</div>
+        <div class="goldrule"></div>
+        <h1>Поваренная<br>книга для<br>голодающихъ</h1>
+        <div class="goldrule"></div>
+        <div class="by">Н. Б. Сѣверова</div>
+        <div class="sub">Посвящается пресыщеннымъ</div>
+        <div class="yr">С.‑ПЕТЕРБУРГЪ · 1911</div>
+      </div>
+    </div>
+
+    <!-- 1 · эпиграф -->
+    <div class="page">
+      <div class="pad">
+        <div class="rh"><span>Поваренная книга</span><span>i</span></div>
+        <div class="kicker">Отъ составителя сего изданія</div>
+        <div class="orn">✦ ❧ ✦</div>
+        <div class="body" style="font-size:.96em">
+          <p class="pull" style="text-align:left">«Вегетаріанство будетъ очень богатымъ и очень бѣднымъ людямъ: однимъ - что бросить, другимъ - что подобрать.»</p>
+          <p>Передъ вами не учёный трактатъ, а <b>сатирическій памфлетъ</b> 1911 года - записанный «съ натуры» голосъ доброй чудачки, всерьёзъ учащей бѣдняковъ питаться сѣномъ и объѣдками.</p>
+          <p>Сначала смѣшно. Потомъ - узнаёшь общество. Подъ конецъ - видишь portrait эпохи наканунѣ катастрофы. Перелистывайте медленно.</p>
+        </div>
+        <div class="foot"><span>Сѣверова</span><span>спускъ по дому</span></div>
+      </div>
+    </div>
+
+    <!-- 2 · содержание -->
+    <div class="page">
+      <div class="pad">
+        <div class="rh"><span>Содержаніе</span><span>ii</span></div>
+        <h2 class="head" style="font-size:1.5em; text-align:center; margin-bottom:.2em">Содержаніе</h2>
+        <div class="orn">·-·-·</div>
+        <div class="toc">
+          <div class="row"><span class="n">I.</span><span class="t">Глупое вегетаріанство<span class="sub">сѣнная дама и её откровеніе</span></span><span class="d"></span></div>
+          <div class="row"><span class="n">II.</span><span class="t">Сатира на общество<span class="sub">кормленіе голодныхъ объѣдками</span></span><span class="d"></span></div>
+          <div class="row"><span class="n">III.</span><span class="t">Портретъ революціи<span class="sub">«что мы, скоты?» - и тупикъ</span></span><span class="d"></span></div>
+          <div class="row"><span class="n">✦</span><span class="t">Два исхода<span class="sub">и портретъ интеллигенціи</span></span><span class="d"></span></div>
+        </div>
+        <div class="orn" style="margin-top:auto">❧</div>
+        <div class="foot"><span>Сѣверова · 1911</span><span>листайте далѣе →</span></div>
+      </div>
+    </div>
+
+    <!-- 3 · DIVIDER I -->
+    <div class="page divider" data-act="1">
+      <div class="pad">
+        <div class="big">I</div>
+        <div class="otd">Отдѣлъ первый</div>
+        <h2>Глупое вегетаріанство</h2>
+        <div class="orn">✦</div>
+        <div class="lead">Знакомство съ «сѣнной дамой» и движеніемъ, надъ которымъ смѣялись салоны.</div>
+      </div>
+    </div>
+
+    <!-- 4 · Сенная дама -->
+    <div class="page" data-act="1">
+      <div class="pad">
+        <div class="rh"><span>Отдѣлъ I</span><span>1</span></div>
+        <h2 class="head">Сѣнная дама</h2>
+        <div class="kicker">героиня и её проповѣдь</div>
+        <div class="body dropcap">
+          <p>Наталья Нордманъ - гражданская жена художника Ильи Рѣпина, хозяйка усадьбы «Пенаты». Съ горящими глазами она проповѣдуетъ: ѣсть надо <b>сѣно и травы</b> - и тогда никто на свѣтѣ не будетъ голодать.</p>
+          <p>Её всерьёзъ занимаетъ, какъ накормить бѣдныхъ. Отвѣтъ она находитъ въ собственной тарелкѣ и садится писать руководство «для тѣхъ, у кого ничего нѣтъ».</p>
+        </div>
+        <div class="agit"><div class="k">Вступи въ Общество!</div><div class="s">Обѣдъ - 2 копѣйки. Даромъ для всѣхъ!</div></div>
+        <div class="foot"><span>сѣнная дама</span><span>Пенаты</span></div>
+      </div>
+    </div>
+
+    <!-- 5 · PLATE 1905 -->
+    <div class="page plate" data-act="1">
+      <div class="img" style="background-image:url('materials/images/act1_nordman-repin-1905.jpg')"></div>
+      <div class="vig"></div>
+      <div class="cap"><b>Н. Б. Нордманъ‑Сѣверова на террасѣ «Пенатовъ».</b><br>Съ портрета И. Е. Рѣпина, 1905 г.</div>
+    </div>
+
+    <!-- 6 · салон / Я питаюсь сеном -->
+    <div class="page" data-act="1">
+      <div class="pad">
+        <div class="rh"><span>Отдѣлъ I</span><span>2</span></div>
+        <div class="kicker">сцена въ салонѣ</div>
+        <div class="pull">«Я питаюсь сѣномъ… вѣдь это цѣлое откровеніе.»</div>
+        <span class="src">Сѣверова, 1911</span>
+        <div class="orn">·-·-·</div>
+        <div class="body">
+          <p>На литературномъ вечерѣ располнѣвшая генеральша объявляетъ, что похудѣла на сѣнѣ. Надъ нею снисходительно смѣются - какъ надъ милымъ чудакомъ.</p>
+          <p>Она не смущается. За её чудачествомъ - цѣлое движеніе: толстовское опрощеніе, отказъ отъ мяса, ненасиліе, журналы и общества.</p>
+        </div>
+        <div class="voice" style="top:20cqh; right:7cqw">ха‑ха…<br>сѣно!</div>
+        <div class="voice" style="bottom:24cqh; left:8cqw; transform:rotate(5deg); color:rgba(70,48,22,.4)">травку<br>кушаетъ…</div>
+        <div class="foot"><span>откровеніе</span><span>Сѣверова</span></div>
+      </div>
+    </div>
+
+    <!-- 7 · PLATE magazine -->
+    <div class="page plate" data-act="1">
+      <div class="img" style="background-image:url('materials/agitki/agit_vegetarian-magazine-1905.png')"></div>
+      <div class="vig"></div>
+      <div class="cap"><b>«The Vegetarian Magazine».</b> Обложка, 1905 г.<br>Языкъ движенія, къ которому принадлежала авторъ.</div>
+    </div>
+
+    <!-- 8 · DIVIDER II -->
+    <div class="page divider" data-act="2">
+      <div class="pad">
+        <div class="big">II</div>
+        <div class="otd">Отдѣлъ второй</div>
+        <h2>Сатира на общество</h2>
+        <div class="orn">✦</div>
+        <div class="lead">Рецептъ доброй барыни: кормить бѣдныхъ тѣмъ, что богатые выбрасываютъ.</div>
+      </div>
+    </div>
+
+    <!-- 9 · Бесценные приобретения -->
+    <div class="page" data-act="2">
+      <div class="pad">
+        <div class="rh"><span>Отдѣлъ II</span><span>3</span></div>
+        <h2 class="head" style="font-size:1.5em">Безцѣнныя пріобрѣтенія</h2>
+        <div class="kicker">глава о кухонныхъ отбросахъ</div>
+        <div class="body dropcap">
+          <p>А вотъ и рецептъ. Бѣдные должны доѣдать то, что богатые бросаютъ: ботву, кожуру, очистки, помои. «Въ этихъ коркахъ и зелени - главная питательность растеній».</p>
+        </div>
+        <div class="pull">«…то, что обыкновенно бросаютъ, - самыми питательными частями.»</div>
+        <span class="src">Сѣверова, 1911</span>
+        <div class="body" style="margin-top:.4em">
+          <p>Голодъ подаётся какъ удача: то, что выкинуто, объявлено сокровищемъ. Доброта здѣсь неотличима отъ издѣвки.</p>
+        </div>
+        <div class="foot"><span>пріобрѣтенія</span><span>Сѣверова</span></div>
+      </div>
+    </div>
+
+    <!-- 10 · PLATE Айвазовский -->
+    <div class="page plate" data-act="2">
+      <div class="img" style="background-image:url('materials/images/act2_aivazovsky_razdacha-prodovolstviya.jpg')"></div>
+      <div class="vig"></div>
+      <div class="cap"><b>И. К. Айвазовскій. «Раздача продовольствія».</b><br>Благотворительное кормленіе голодающихъ.</div>
+    </div>
+
+    <!-- 11 · Проект кормления -->
+    <div class="page" data-act="2">
+      <div class="pad">
+        <div class="rh"><span>Отдѣлъ II</span><span>4</span></div>
+        <div class="kicker">«Проектъ кормленія голодныхъ»</div>
+        <div class="pull" style="font-size:1.25em">«Богатое населеніе, не затрачивая ни гроша, можетъ ежедневно накормить всѣхъ нуждающихся.»</div>
+        <span class="src">Сѣверова, 1911</span>
+        <div class="orn">·-·-·</div>
+        <div class="body">
+          <p>Великій планъ: котлы въ каждомъ дворѣ, матеріалъ - изъ кухонь богатыхъ домовъ. Накормить голоднаго мусоромъ и подать это какъ высшую щедрость.</p>
+          <p>Добрый отвѣтъ на голодъ оказывается самимъ голодомъ, надѣвшимъ улыбку.</p>
+        </div>
+        <div class="foot"><span>проектъ</span><span>Сѣверова</span></div>
+      </div>
+    </div>
+
+    <!-- 12 · PLATE двор-колодец -->
+    <div class="page plate" data-act="2">
+      <div class="img" style="background-image:url('materials/refs/ref_dvor-kolodec_spb-03.jpg')"></div>
+      <div class="vig"></div>
+      <div class="cap"><b>Дворъ‑колодезь доходнаго дома. С.‑Петербургъ.</b><br>Внизу, у помойной ямы, кормятся тряпичники.</div>
+    </div>
+
+    <!-- 13 · DIVIDER III -->
+    <div class="page divider" data-act="3">
+      <div class="pad">
+        <div class="big">III</div>
+        <div class="otd">Отдѣлъ третій</div>
+        <h2>Портретъ революціи</h2>
+        <div class="orn">✦</div>
+        <div class="lead">Народъ возвращаетъ барынѣ её рецептъ въ лицо. И мирныхъ отвѣтовъ не остаётся.</div>
+      </div>
+    </div>
+
+    <!-- 14 · ★ РАЗРЫВ -->
+    <div class="page rupture" data-act="3" data-special="rupture">
+      <div class="rip"></div>
+      <div class="pad rpad">
+        <div class="lead-line">И тутъ народъ отвѣчаетъ -</div>
+        <div class="shout">Что мы, скоты,<br>чтобы сѣномъ<br>да отбросами<br>свиней жрать?!</div>
+        <div class="rsrc">Сѣверова, 1911 · глава «Недовѣріе»</div>
+        <div class="voice cook">- А сами‑то что<br>изволите кушать?</div>
+      </div>
+    </div>
+
+    <!-- 15 · PLATE голод 1907 -->
+    <div class="page plate" data-act="3">
+      <div class="img" style="background-image:url('materials/images/act3_golod-prodazha-detey-1907.jpg')"></div>
+      <div class="vig"></div>
+      <div class="cap"><b>Голодъ въ Россіи.</b> «The Illustrated London News», 1907 г.<br>Та «дѣйствительность», которую героиня зовётъ недоразумѣніемъ.</div>
+    </div>
+
+    <!-- 16 · ★ ТИШИНА -->
+    <div class="page silence" data-act="3" data-special="silence">
+      <div class="pad spad">
+        <div class="hush">.-.-.</div>
+        <div class="year">это 1911 годъ</div>
+      </div>
+    </div>
+
+    <!-- 17 · Тупик -->
+    <div class="page" data-act="3">
+      <div class="pad">
+        <div class="rh"><span>Отдѣлъ III</span><span>5</span></div>
+        <h2 class="head" style="font-size:1.5em">Тупикъ, изъ котораго одинъ выходъ</h2>
+        <div class="body dropcap" style="margin-top:.3em">
+          <p>Голодъ есть. Отвѣтъ одинъ - объѣдки. Объѣдки отвергнуты - не изъ‑за вкуса, изъ‑за достоинства. Другого рѣшенія никто не далъ.</p>
+        </div>
+        <div class="pull" style="color:var(--ember)">Когда голодному говорятъ «ѣшь мусоръ и скажи спасибо» - мирныхъ отвѣтовъ не остаётся.</div>
+        <div class="body">
+          <p>Книга не пророчитъ революцію. Она показываетъ безвыходность, которая ею кончается. Смѣшная книжка про сѣно была обратнымъ отсчётомъ.</p>
+        </div>
+        <div class="foot"><span>1911</span><span>обратный отсчётъ</span></div>
+      </div>
+    </div>
+
+    <!-- 18 · PLATE Петроград 1917 -->
+    <div class="page plate" data-act="3">
+      <div class="img" style="background-image:url('materials/images/act3_petrograd-besporyadki-nevskiy-1917.jpg')"></div>
+      <div class="vig"></div>
+      <div class="cap"><b>Безпорядки на Невскомъ проспектѣ. Петроградъ, 1917 г.</b><br>По той же лѣстницѣ - но уже вверхъ.</div>
+    </div>
+
+    <!-- 19 · Два исхода -->
+    <div class="page dip" data-act="3">
+      <div class="pad">
+        <div class="rh"><span>Заключеніе</span><span>6</span></div>
+        <h2 class="head" style="font-size:1.4em; text-align:center">Одинъ сюжетъ - два исхода</h2>
+        <div class="pair">
+          <figure>
+            <div class="ph" style="background-image:url('materials/agitki/agit_doloy-kuhonnoe-rabstvo.jpg')"></div>
+            <figcaption><b>Мечта сбылась.</b> «Долой кухонное рабство», 1931: столовыя и ясли - тѣ самые котлы изъ «Проекта».</figcaption>
+          </figure>
+          <figure>
+            <div class="ph" style="background-image:url('materials/agitki/agit_moor_pomogi-1921.jpg')"></div>
+            <figcaption><b>Кошмаръ сбылся.</b> Д. Мооръ, «Помоги», 1921: голодъ въ Поволжьѣ - уже послѣ революціи.</figcaption>
+          </figure>
+        </div>
+        <div class="body" style="font-size:.78em; text-align:center">
+          <p>Её мягкая утопія послѣ революціи расщепилась на два плаката: свѣтлый «новый бытъ» и чёрный «Помоги». Мечта и кошмаръ - изъ одного зерна.</p>
+        </div>
+        <div class="foot"><span>два исхода</span><span>Сѣверова</span></div>
+      </div>
+    </div>
+
+    <!-- 20 · Финал портрет -->
+    <div class="page" data-act="3">
+      <div class="pad">
+        <div class="rh"><span>Заключеніе</span><span>7</span></div>
+        <div style="display:flex; gap:.7em; align-items:flex-start; margin-bottom:.5em">
+          <div style="flex:0 0 38%; aspect-ratio:3/4; background-size:cover; background-position:top center; filter:sepia(.45) contrast(1.02) brightness(.9); border:1px solid #8f7948; background-image:url('materials/images/act1_nordman-repin-1911.jpg')"></div>
+          <div style="flex:1">
+            <div class="kicker" style="margin-bottom:.2em">портретъ автора</div>
+            <h2 class="head" style="font-size:1.25em; line-height:1.05">Интеллигенція наканунѣ катастрофы</h2>
+          </div>
+        </div>
+        <div class="body">
+          <p>Сама Сѣверова умретъ въ 1914‑мъ отъ туберкулёза - болѣзни, которую въ книгѣ винила въ молокѣ, - въ чужой благотворительной клиникѣ, отказавшись отъ денегъ Рѣпина. Свой идеалъ добровольной бѣдности она прожила до конца.</p>
+          <p>Смѣшная книжка про сѣно оказалась автопортретомъ интеллигенціи: доброй, умной, утопичной, осмѣянной - и безсильной передъ бѣдой.</p>
+        </div>
+        <div class="src" style="text-align:center; margin-top:.2em">съ портрета И. Е. Рѣпина, 1911 г.</div>
+        <div class="foot"><span>портретъ</span><span>1911</span></div>
+      </div>
+    </div>
+
+    <!-- 21 · Источники -->
+    <div class="page" data-act="3">
+      <div class="pad">
+        <div class="rh"><span>Источники и литература</span><span>ix</span></div>
+        <h2 class="head" style="font-size:1.35em; text-align:center; margin-bottom:.3em">Источники и литература</h2>
+        <ul class="refs">
+          <li><b>Источникъ.</b> Сѣверова Н. Б. Поваренная книга для голодающихъ. - СПб.: Первая женская типографія Т‑ва «Печатнаго Станка», 1911.</li>
+          <li><b>Брангъ П.</b> Россія неизвѣстная: исторія культуры вегетаріанскихъ образовъ жизни. - М.: Языки славянской культуры, 2006.</li>
+          <li><b>Зарубина Н. Н.</b> Вегетаріанство въ Россіи // Историческая психологія и соціологія исторіи. 2016. Т. 9, № 2.</li>
+          <li><b>«Вегетаріанское обозрѣніе»</b> (Кіевъ, ред. И. О. Перперъ), 1913 - статьи А. Ясиновскаго, А. Чертковой и др.</li>
+        </ul>
+        <div class="refs note">Изображенія - подлинныя репродукціи и фотографіи эпохи (public domain). Орѳографія цитатъ осовременена; заглавія и подписи - въ дореформенной.</div>
+        <div class="foot"><span>колофонъ</span><span>конецъ</span></div>
+      </div>
+    </div>
+
+    <!-- 22 · BACK -->
+    <div class="page back" data-density="hard">
+      <div class="pad">
+        <div class="goldrule"></div>
+        <div class="pretitle">Исторический проектъ · Исторія Россіи</div>
+        <h1 style="font-size:1.5em; margin:.5em 0">Замѣтки<br>съ натуры</h1>
+        <div class="goldrule"></div>
+        <div class="sub" style="margin-top:.6em">глупое вегетаріанство →<br>сатира на общество →<br>портретъ революціи</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="bar">
+  <button id="prev" aria-label="назад">‹</button>
+  <span class="ctr" id="ctr">обложка</span>
+  <button id="next" aria-label="впередъ">›</button>
+  <button id="mute" aria-label="звукъ" title="звукъ">🔊</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/page-flip@2.0.7/dist/js/page-flip.browser.js"></script>
+<script>
+/* ---------------- AUDIO (soft synthesised page rustle only - no ambient drone) ---------------- */
+let AC, started=false, muted=false;
+function ensureAudio(){
+  if(started||muted) return;
+  try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+  if(AC.state==='suspended') AC.resume();
+  started=true;
+}
+function rustle(){
+  if(!started||muted||!AC) return;
+  const t=AC.currentTime, dur=.30+Math.random()*.10, N=Math.floor(AC.sampleRate*dur);
+  const buf=AC.createBuffer(1,N,AC.sampleRate), d=buf.getChannelData(0);
+  // long soft attack (no transient) + gentle decay
+  const atk=Math.floor(AC.sampleRate*0.06), ph=Math.random()*6;
+  for(let i=0;i<N;i++){
+    const env = i<atk ? i/atk : Math.pow(1-(i-atk)/(N-atk),1.4);
+    // slow granular flicker → soft paper crinkle
+    const crinkle = 0.6 + 0.4*Math.abs(Math.sin(i*0.0022+ph));
+    d[i]=(Math.random()*2-1)*env*crinkle;
+  }
+  const s=AC.createBufferSource(); s.buffer=buf;
+  // low-pass only: warm, muffled paper - no highpass hiss, no bandpass whistle
+  const lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1100; lp.Q.value=.4;
+  const g=AC.createGain();
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.022,t+.05);
+  g.gain.linearRampToValueAtTime(0,t+dur);
+  s.connect(lp); lp.connect(g); g.connect(AC.destination); s.start(t);
+}
+
+/* ---------------- FLIPBOOK + STORYTELLING ---------------- */
+const el=document.getElementById('book'), loading=document.getElementById('loading'),
+      hint=document.getElementById('hint'), ctr=document.getElementById('ctr');
+
+function visiblePages(){
+  return [...document.querySelectorAll('#book .page')].filter(p=>{
+    const r=p.getBoundingClientRect();
+    return r.width>20 && r.height>20 && getComputedStyle(p).visibility!=='hidden';
+  });
+}
+// soft "spine valley" laid exactly between the two visible leaves, hiding the seam
+const spine=document.getElementById('spine');
+function placeSpine(){
+  const vis=visiblePages();
+  if(vis.length<2){ spine.style.opacity='0'; return; }
+  vis.sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left);
+  const L=vis[0].getBoundingClientRect(), R=vis[vis.length-1].getBoundingClientRect();
+  const cx=(L.right+R.left)/2, top=Math.min(L.top,R.top), h=Math.max(L.bottom,R.bottom)-top;
+  const W=Math.max(28,(R.left-L.right)+36);
+  spine.style.cssText='position:fixed; z-index:6; pointer-events:none; opacity:1;'
+    +`top:${top}px; height:${h}px; left:${cx-W/2}px; width:${W}px;`
+    +'background:linear-gradient(90deg,'
+    +'transparent 0%, rgba(56,38,16,0) 14%, rgba(48,32,13,.92) 41%,'
+    +'rgba(24,16,7,.99) 50%, rgba(48,32,13,.92) 59%, rgba(56,38,16,0) 86%, transparent 100%)';
+}
+function flash(){ const f=document.getElementById('flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); }
+function hitRupture(p){ p.classList.add('hit'); flash(); setTimeout(()=>p.classList.remove('hit'),750); }
+
+let lastAct=-1, rupVisible=false;
+function onSettle(){
+  const vis=visiblePages();
+  // act tone (max act in view) → drives ambient + desk darkening
+  let a=0; vis.forEach(p=>{ const v=+(p.dataset.act||0); if(v>a) a=v; });
+  if(a!==lastAct){ lastAct=a; document.body.dataset.act=a; }
+  // rupture: fire the one-shot once per entry
+  const rup=vis.find(p=>p.dataset.special==='rupture');
+  if(rup && !rupVisible){ rupVisible=true; hitRupture(rup); }
+  if(!rup) rupVisible=false;
+  // silence beat: slow reveal, once
+  const sil=vis.find(p=>p.dataset.special==='silence');
+  if(sil){ const pad=sil.querySelector('.pad'); if(pad && !pad.dataset.played){ pad.dataset.played='1'; pad.style.animation='fadeup 2.2s ease both'; } }
+}
+
+function build(){
+  const pf=new St.PageFlip(el,{
+    width:560, height:780, size:'stretch',
+    minWidth:280, maxWidth:620, minHeight:400, maxHeight:860,
+    maxShadowOpacity:.28, showCover:true, flippingTime:750, usePortrait:true, mobileScrollSupport:false,
+  });
+  pf.loadFromHTML(document.querySelectorAll('#book > .page'));
+  const total=pf.getPageCount();
+  const label=i=> i===0?'обложка' : (i>=total-1?'конецъ':'стр. '+i+' / '+(total-2));
+
+  function after(){ ensureAudio(); rustle(); setTimeout(()=>{ onSettle(); placeSpine(); },30); }
+  pf.on('flip',(e)=>{ ctr.textContent=label(e.data); after(); });
+  pf.on('init',()=>{ ctr.textContent=label(pf.getCurrentPageIndex()); setTimeout(()=>{ onSettle(); placeSpine(); },50); });
+  // hide the spine while a leaf is mid-turn, restore it once the book is at rest
+  pf.on('changeState',(e)=>{ if(e.data==='read') placeSpine(); else spine.style.opacity='0'; });
+
+  document.getElementById('next').onclick=()=>pf.flipNext();
+  document.getElementById('prev').onclick=()=>pf.flipPrev();
+  addEventListener('keydown',(e)=>{ if(e.key==='ArrowRight')pf.flipNext(); if(e.key==='ArrowLeft')pf.flipPrev(); });
+  addEventListener('resize',()=>setTimeout(placeSpine,80));
+  let wlock=false;
+  el.addEventListener('wheel',(e)=>{ if(wlock)return; wlock=true; setTimeout(()=>wlock=false,650); (e.deltaY>0?pf.flipNext():pf.flipPrev()); },{passive:true});
+
+  const mute=document.getElementById('mute');
+  mute.onclick=()=>{ muted=!muted; mute.textContent=muted?'🔇':'🔊';
+    if(!muted) ensureAudio(); };
+
+  addEventListener('pointerdown',ensureAudio,{once:true});
+  loading.style.opacity='0'; setTimeout(()=>loading.remove(),500);
+  setTimeout(()=>{ hint.style.opacity='0'; },5500);
+  setTimeout(()=>{ onSettle(); placeSpine(); },350);
+}
+
+if(window.St&&St.PageFlip){ build(); }
+else addEventListener('load',()=>{ if(window.St&&St.PageFlip) build();
+  else loading.textContent='Не удалось загрузить листалку (нуженъ интернетъ для CDN).'; });
+</script>
+</body>
+</html>
